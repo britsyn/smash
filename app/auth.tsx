@@ -16,6 +16,30 @@ type Mode = 'signin' | 'signup';
 type Sport = 'padel' | 'tennis';
 type SkillLevel = 'beginner' | 'intermediate' | 'advanced';
 
+interface FieldErrors {
+  name?: string;
+  email?: string;
+  password?: string;
+}
+
+function validateEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+function validate(mode: Mode, name: string, email: string, password: string): FieldErrors {
+  const errors: FieldErrors = {};
+  if (mode === 'signup' && name.trim().length < 2) {
+    errors.name = 'Enter at least 2 characters';
+  }
+  if (!validateEmail(email)) {
+    errors.email = 'Enter a valid email address';
+  }
+  if (password.length < 6) {
+    errors.password = 'Password must be at least 6 characters';
+  }
+  return errors;
+}
+
 export default function AuthScreen() {
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
@@ -24,38 +48,53 @@ export default function AuthScreen() {
   const [sport, setSport] = useState<Sport>('padel');
   const [skillLevel, setSkillLevel] = useState<SkillLevel>('intermediate');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [serverError, setServerError] = useState<string | null>(null);
   const [checkEmail, setCheckEmail] = useState(false);
 
   const handleSignIn = async () => {
-    setError(null);
+    const errors = validate('signin', '', email, password);
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      return;
+    }
+    setFieldErrors({});
+    setServerError(null);
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) setError(error.message);
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (error) setServerError(error.message);
     setLoading(false);
   };
 
   const handleSignUp = async () => {
-    setError(null);
-    if (!name.trim()) {
-      setError('Please enter your name');
+    const errors = validate('signup', name, email, password);
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
       return;
     }
+    setFieldErrors({});
+    setServerError(null);
     setLoading(true);
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: email.trim(),
       password,
       options: {
+        emailRedirectTo: 'smash://auth/callback',
         data: { name: name.trim(), sport, skill_level: skillLevel },
       },
     });
     if (error) {
-      setError(error.message);
+      setServerError(error.message);
     } else if (data.session === null) {
-      // Email confirmation required
       setCheckEmail(true);
     }
     setLoading(false);
+  };
+
+  const switchMode = (next: Mode) => {
+    setMode(next);
+    setFieldErrors({});
+    setServerError(null);
   };
 
   if (checkEmail) {
@@ -64,11 +103,14 @@ export default function AuthScreen() {
         <Text style={{ fontSize: 48 }}>📬</Text>
         <Text style={styles.logoText}>Check your email</Text>
         <Text style={[styles.tagline, { textAlign: 'center', marginTop: 8 }]}>
-          We sent a confirmation link to{'\n'}{email}
+          We sent a confirmation link to{'\n'}{email.trim()}
+        </Text>
+        <Text style={[styles.tagline, { textAlign: 'center', color: '#444', marginTop: 4 }]}>
+          Tap the link — it'll open the app automatically.
         </Text>
         <TouchableOpacity
           style={[styles.cta, { marginTop: 32, paddingHorizontal: 32 }]}
-          onPress={() => { setCheckEmail(false); setMode('signin'); }}
+          onPress={() => { setCheckEmail(false); switchMode('signin'); }}
         >
           <Text style={styles.ctaText}>Back to Sign In</Text>
         </TouchableOpacity>
@@ -97,7 +139,7 @@ export default function AuthScreen() {
         <View style={styles.toggle}>
           <TouchableOpacity
             style={[styles.toggleBtn, mode === 'signin' && styles.toggleBtnActive]}
-            onPress={() => { setMode('signin'); setError(null); }}
+            onPress={() => switchMode('signin')}
           >
             <Text style={[styles.toggleLabel, mode === 'signin' && styles.toggleLabelActive]}>
               Sign In
@@ -105,7 +147,7 @@ export default function AuthScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.toggleBtn, mode === 'signup' && styles.toggleBtnActive]}
-            onPress={() => { setMode('signup'); setError(null); }}
+            onPress={() => switchMode('signup')}
           >
             <Text style={[styles.toggleLabel, mode === 'signup' && styles.toggleLabelActive]}>
               Sign Up
@@ -113,38 +155,50 @@ export default function AuthScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Fields */}
+        {/* Name (signup only) */}
         {mode === 'signup' && (
-          <TextInput
-            style={styles.input}
-            placeholder="Your name"
-            placeholderTextColor="#555"
-            value={name}
-            onChangeText={setName}
-            autoCapitalize="words"
-          />
+          <View style={styles.fieldBlock}>
+            <TextInput
+              style={[styles.input, fieldErrors.name ? styles.inputError : null]}
+              placeholder="Your name"
+              placeholderTextColor="#555"
+              value={name}
+              onChangeText={(t) => { setName(t); setFieldErrors((e) => ({ ...e, name: undefined })); }}
+              autoCapitalize="words"
+            />
+            {fieldErrors.name && <Text style={styles.fieldError}>{fieldErrors.name}</Text>}
+          </View>
         )}
 
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#555"
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
+        {/* Email */}
+        <View style={styles.fieldBlock}>
+          <TextInput
+            style={[styles.input, fieldErrors.email ? styles.inputError : null]}
+            placeholder="Email"
+            placeholderTextColor="#555"
+            value={email}
+            onChangeText={(t) => { setEmail(t); setFieldErrors((e) => ({ ...e, email: undefined })); }}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            autoCorrect={false}
+          />
+          {fieldErrors.email && <Text style={styles.fieldError}>{fieldErrors.email}</Text>}
+        </View>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor="#555"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
+        {/* Password */}
+        <View style={styles.fieldBlock}>
+          <TextInput
+            style={[styles.input, fieldErrors.password ? styles.inputError : null]}
+            placeholder="Password"
+            placeholderTextColor="#555"
+            value={password}
+            onChangeText={(t) => { setPassword(t); setFieldErrors((e) => ({ ...e, password: undefined })); }}
+            secureTextEntry
+          />
+          {fieldErrors.password && <Text style={styles.fieldError}>{fieldErrors.password}</Text>}
+        </View>
 
-        {/* Sport picker (sign up only) */}
+        {/* Sport + skill (signup only) */}
         {mode === 'signup' && (
           <>
             <Text style={styles.sectionLabel}>Sport</Text>
@@ -179,8 +233,8 @@ export default function AuthScreen() {
           </>
         )}
 
-        {/* Error */}
-        {error && <Text style={styles.error}>{error}</Text>}
+        {/* Server error */}
+        {serverError && <Text style={styles.serverError}>{serverError}</Text>}
 
         {/* Submit */}
         <TouchableOpacity
@@ -260,6 +314,9 @@ const styles = StyleSheet.create({
   toggleLabelActive: {
     color: '#000',
   },
+  fieldBlock: {
+    marginBottom: 12,
+  },
   input: {
     backgroundColor: '#1a1a1a',
     borderRadius: 12,
@@ -267,9 +324,17 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     color: '#fff',
     fontSize: 15,
-    marginBottom: 12,
     borderWidth: 1,
     borderColor: '#2a2a2a',
+  },
+  inputError: {
+    borderColor: '#ff4d4d',
+  },
+  fieldError: {
+    color: '#ff4d4d',
+    fontSize: 12,
+    marginTop: 4,
+    marginLeft: 4,
   },
   sectionLabel: {
     color: '#888',
@@ -306,7 +371,7 @@ const styles = StyleSheet.create({
   chipTextActive: {
     color: '#e8ff6b',
   },
-  error: {
+  serverError: {
     color: '#ff4d4d',
     fontSize: 13,
     marginBottom: 12,
