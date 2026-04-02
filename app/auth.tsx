@@ -13,7 +13,7 @@ import {
 import { supabase } from '@/lib/supabase';
 
 type Mode = 'signin' | 'signup';
-type Sport = 'padel' | 'tennis';
+type Sport = 'padel' | 'tennis' | 'football';
 type SkillLevel = 'beginner' | 'intermediate' | 'advanced';
 
 interface FieldErrors {
@@ -203,14 +203,14 @@ export default function AuthScreen() {
           <>
             <Text style={styles.sectionLabel}>Sport</Text>
             <View style={styles.chipRow}>
-              {(['padel', 'tennis'] as Sport[]).map((s) => (
+              {(['padel', 'tennis', 'football'] as Sport[]).map((s) => (
                 <TouchableOpacity
                   key={s}
                   style={[styles.chip, sport === s && styles.chipActive]}
                   onPress={() => setSport(s)}
                 >
                   <Text style={[styles.chipText, sport === s && styles.chipTextActive]}>
-                    {s === 'padel' ? '🏓 Padel' : '🎾 Tennis'}
+                    {s === 'padel' ? '🏓 Padel' : s === 'tennis' ? '🎾 Tennis' : '⚽ Football'}
                   </Text>
                 </TouchableOpacity>
               ))}

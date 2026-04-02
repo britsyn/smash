@@ -1,4 +1,4 @@
-export type Sport = 'padel' | 'tennis';
+export type Sport = 'padel' | 'tennis' | 'football';
 
 export type SkillLevel = 'beginner' | 'intermediate' | 'advanced';
 

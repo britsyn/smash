@@ -95,7 +95,7 @@ export default function GamesScreen() {
         {/* Top row: sport + status badge */}
         <View style={styles.cardTop}>
           <View style={styles.sportBadge}>
-            <Text style={styles.sportEmoji}>{item.sport === 'padel' ? '🏓' : '🎾'}</Text>
+            <Text style={styles.sportEmoji}>{item.sport === 'padel' ? '🏓' : item.sport === 'football' ? '⚽' : '🎾'}</Text>
             <Text style={styles.sportLabel}>{item.sport}</Text>
           </View>
           <View style={[styles.statusBadge, item.status === 'confirmed' ? styles.statusConfirmed : styles.statusPending]}>

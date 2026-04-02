@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
@@ -7,11 +7,29 @@ import { SwipeCard } from '@/components/SwipeCard';
 import { MatchModal } from '@/components/MatchModal';
 import { UserProfile } from '@/types';
 
+type Sport = 'padel' | 'tennis';
+type Level = 'beginner' | 'intermediate' | 'advanced';
+
+const SPORTS: { value: Sport; label: string }[] = [
+  { value: 'padel', label: '🏓 Padel' },
+  { value: 'tennis', label: '🎾 Tennis' },
+  { value: 'football', label: '⚽ Football' },
+];
+
+const LEVELS: { value: Level; label: string }[] = [
+  { value: 'beginner', label: 'Beginner' },
+  { value: 'intermediate', label: 'Intermediate' },
+  { value: 'advanced', label: 'Advanced' },
+];
+
 export default function DiscoverScreen() {
   const { session } = useSession();
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [matchedProfile, setMatchedProfile] = useState<UserProfile | null>(null);
+
+  const [sportFilters, setSportFilters] = useState<Sport[]>([]);
+  const [levelFilters, setLevelFilters] = useState<Level[]>([]);
 
   const userId = session?.user.id;
 
@@ -19,28 +37,31 @@ export default function DiscoverScreen() {
     if (!userId) return;
     setLoading(true);
 
-    // Get IDs already swiped (liked or passed)
     const { data: swipes } = await supabase
       .from('swipes')
       .select('target_id')
       .eq('swiper_id', userId);
 
     const excludeIds = (swipes ?? []).map((s) => s.target_id);
-    excludeIds.push(userId); // exclude self
+    excludeIds.push(userId);
 
-    // Fetch current user's sport
     const { data: me } = await supabase
       .from('profiles')
       .select('sport')
       .eq('id', userId)
       .single();
 
-    // Query profiles with matching sport, excluding already swiped
+    const activeSports = sportFilters.length > 0 ? sportFilters : [me?.sport].filter(Boolean);
+
     let query = supabase
       .from('profiles')
       .select('id, name, avatar_url, sport, skill_level, location, bio')
-      .eq('sport', me?.sport)
+      .in('sport', activeSports)
       .limit(20);
+
+    if (levelFilters.length > 0) {
+      query = query.in('skill_level', levelFilters);
+    }
 
     if (excludeIds.length > 0) {
       query = query.not('id', 'in', `(${excludeIds.join(',')})`);
@@ -49,18 +70,29 @@ export default function DiscoverScreen() {
     const { data } = await query;
     setProfiles(data ?? []);
     setLoading(false);
-  }, [userId]);
+  }, [userId, sportFilters, levelFilters]);
 
   useEffect(() => {
     fetchProfiles();
   }, [fetchProfiles]);
+
+  const toggleSport = (sport: Sport) => {
+    setSportFilters((prev) =>
+      prev.includes(sport) ? prev.filter((s) => s !== sport) : [...prev, sport]
+    );
+  };
+
+  const toggleLevel = (level: Level) => {
+    setLevelFilters((prev) =>
+      prev.includes(level) ? prev.filter((l) => l !== level) : [...prev, level]
+    );
+  };
 
   const handleSwipe = async (direction: 'like' | 'pass') => {
     if (!userId || profiles.length === 0) return;
 
     const target = profiles[0];
 
-    // Record the swipe
     await supabase.from('swipes').insert({
       swiper_id: userId,
       target_id: target.id,
@@ -68,7 +100,6 @@ export default function DiscoverScreen() {
     });
 
     if (direction === 'like') {
-      // Check if target already liked us back
       const { data: theirLike } = await supabase
         .from('swipes')
         .select('id')
@@ -78,16 +109,11 @@ export default function DiscoverScreen() {
         .single();
 
       if (theirLike) {
-        // Mutual like — create a match
-        await supabase.from('matches').insert({
-          user_a: userId,
-          user_b: target.id,
-        });
+        await supabase.from('matches').insert({ user_a: userId, user_b: target.id });
         setMatchedProfile(target);
       }
     }
 
-    // Remove the top card
     setProfiles((prev) => prev.slice(1));
   };
 
@@ -104,6 +130,37 @@ export default function DiscoverScreen() {
       <View style={styles.container}>
         <Text style={styles.header}>Discover</Text>
 
+        {/* Filters */}
+        <View style={styles.filtersBlock}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+            {SPORTS.map((s) => (
+              <TouchableOpacity
+                key={s.value}
+                style={[styles.chip, sportFilters.includes(s.value) && styles.chipActiveSport]}
+                onPress={() => toggleSport(s.value)}
+              >
+                <Text style={[styles.chipText, sportFilters.includes(s.value) && styles.chipTextActive]}>
+                  {s.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+
+            <View style={styles.divider} />
+
+            {LEVELS.map((l) => (
+              <TouchableOpacity
+                key={l.value}
+                style={[styles.chip, levelFilters.includes(l.value) && styles.chipActiveLevel]}
+                onPress={() => toggleLevel(l.value)}
+              >
+                <Text style={[styles.chipText, levelFilters.includes(l.value) && styles.chipTextActive]}>
+                  {l.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
         {loading ? (
           <View style={styles.center}>
             <ActivityIndicator color="#e8ff6b" size="large" />
@@ -111,8 +168,8 @@ export default function DiscoverScreen() {
         ) : profiles.length === 0 ? (
           <View style={styles.center}>
             <Text style={styles.emptyEmoji}>🎾</Text>
-            <Text style={styles.emptyTitle}>No more players</Text>
-            <Text style={styles.emptyText}>Check back later or expand your search</Text>
+            <Text style={styles.emptyTitle}>No players found</Text>
+            <Text style={styles.emptyText}>Try adjusting your filters</Text>
             <TouchableOpacity style={styles.refreshButton} onPress={fetchProfiles}>
               <Text style={styles.refreshText}>Refresh</Text>
             </TouchableOpacity>
@@ -120,10 +177,10 @@ export default function DiscoverScreen() {
         ) : (
           <>
             <View style={styles.cardStack}>
-              {/* Render up to 2 cards; back card is static for depth effect */}
               {profiles[1] && (
                 <View style={[styles.cardWrapper, styles.backCard]} pointerEvents="none">
                   <SwipeCard
+                    key={profiles[1].id}
                     profile={profiles[1]}
                     onSwipeLeft={() => {}}
                     onSwipeRight={() => {}}
@@ -132,6 +189,7 @@ export default function DiscoverScreen() {
               )}
               <View style={styles.cardWrapper}>
                 <SwipeCard
+                  key={profiles[0].id}
                   profile={profiles[0]}
                   onSwipeLeft={() => handleSwipe('pass')}
                   onSwipeRight={() => handleSwipe('like')}
@@ -146,7 +204,6 @@ export default function DiscoverScreen() {
               >
                 <Text style={styles.passIcon}>✕</Text>
               </TouchableOpacity>
-
               <TouchableOpacity
                 style={[styles.actionButton, styles.likeButton]}
                 onPress={() => handleSwipe('like')}
@@ -181,8 +238,47 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '900',
     color: '#ffffff',
-    marginBottom: 16,
+    marginBottom: 12,
     letterSpacing: 0.5,
+  },
+  filtersBlock: {
+    marginBottom: 12,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingRight: 8,
+  },
+  chip: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+  },
+  chipActiveSport: {
+    backgroundColor: '#e8ff6b22',
+    borderColor: '#e8ff6b',
+  },
+  chipActiveLevel: {
+    backgroundColor: '#ffffff15',
+    borderColor: '#ffffff55',
+  },
+  chipText: {
+    color: '#666',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  chipTextActive: {
+    color: '#e8ff6b',
+  },
+  divider: {
+    width: 1,
+    height: 20,
+    backgroundColor: '#2a2a2a',
+    marginHorizontal: 4,
   },
   cardStack: {
     flex: 1,
