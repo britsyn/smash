@@ -73,7 +73,7 @@ export function SwipeCard({ profile, onSwipeLeft, onSwipeRight }: SwipeCardProps
           <Image source={{ uri: profile.avatar_url }} style={styles.image} />
         ) : (
           <View style={styles.imagePlaceholder}>
-            <Text style={styles.avatarInitial}>{profile.name[0]}</Text>
+            <Text style={styles.avatarInitial}>{profile.name?.[0] ?? '?'}</Text>
           </View>
         )}
 
@@ -89,7 +89,9 @@ export function SwipeCard({ profile, onSwipeLeft, onSwipeRight }: SwipeCardProps
           <Text style={styles.name}>{profile.name}</Text>
           <View style={styles.tags}>
             <View style={styles.tag}>
-              <Text style={styles.tagText}>{profile.sport}</Text>
+              <Text style={styles.tagText}>
+                {profile.sport === 'padel' ? '🏓 Padel' : profile.sport === 'football' ? '⚽ Football' : '🎾 Tennis'}
+              </Text>
             </View>
             <View style={styles.tag}>
               <Text style={styles.tagText}>{profile.skill_level}</Text>

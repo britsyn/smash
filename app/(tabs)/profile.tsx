@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useSession } from '@/hooks/useSession';
 import { UserProfile } from '@/types';
@@ -20,25 +22,29 @@ const SKILL_LABELS: Record<string, string> = {
 const SPORT_LABELS: Record<string, string> = {
   padel: '🏓 Padel',
   tennis: '🎾 Tennis',
+  football: '⚽ Football',
 };
 
 export default function ProfileScreen() {
   const { session } = useSession();
+  const router = useRouter();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchProfile = useCallback(async () => {
     if (!session?.user.id) return;
-    supabase
+    const { data } = await supabase
       .from('profiles')
       .select('id, name, avatar_url, sport, skill_level, location, bio')
       .eq('id', session.user.id)
-      .single()
-      .then(({ data }) => {
-        setProfile(data);
-        setLoading(false);
-      });
+      .single();
+    setProfile(data);
+    setLoading(false);
   }, [session?.user.id]);
+
+  // Re-fetch every time the tab/screen comes into focus —
+  // this picks up changes made on the edit screen after navigating back.
+  useFocusEffect(useCallback(() => { fetchProfile(); }, [fetchProfile]));
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -54,7 +60,16 @@ export default function ProfileScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.header}>Profile</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.header}>Profile</Text>
+        <TouchableOpacity
+          style={styles.editBtn}
+          onPress={() => router.push('/edit-profile')}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={styles.editIcon}>✏️</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Avatar */}
       <View style={styles.avatarBlock}>
@@ -65,7 +80,7 @@ export default function ProfileScreen() {
         <Text style={styles.email}>{session?.user.email}</Text>
       </View>
 
-      {/* Info cards */}
+      {/* Info card */}
       <View style={styles.section}>
         <View style={styles.row}>
           <Text style={styles.rowLabel}>Sport</Text>
@@ -119,11 +134,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 28,
+  },
   header: {
     fontSize: 28,
     fontWeight: '900',
     color: '#fff',
-    marginBottom: 28,
+  },
+  editBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#1a1a1a',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editIcon: {
+    fontSize: 18,
   },
   avatarBlock: {
     alignItems: 'center',
